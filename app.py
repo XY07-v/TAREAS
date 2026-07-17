@@ -1,424 +1,233 @@
-import streamlit as st
-import sqlite3
+import os
+import json
 import pandas as pd
-from datetime import datetime
+from flask import Flask, render_template_string, request, jsonify, make_response
+from pymongo import MongoClient
+from bson import ObjectId, json_util
+from io import BytesIO
 
-# ==========================================
-# 1. CONFIGURACIÓN DE PÁGINA Y ESTILO GLASSMORPHISM
-# ==========================================
-st.set_page_config(
-    page_title="GlassAsana - Admin de Tareas",
-    page_icon="🎯",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+app = Flask(__name__)
 
-# Inyección de CSS para lograr el efecto "Glassmorphism" (vidrio esmerilado)
-st.markdown("""
-<style>
-    /* Fondo general con un gradiente moderno y dinámico */
-    .stApp {
-        background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #311042 100%);
-        color: #f1f5f9;
-    }
-    
-    /* Contenedores con efecto de vidrio esmerilado (Glassmorphism) */
-    div[data-testid="stVerticalBlock"] > div:has(div.glass-card) {
-        background: rgba(255, 255, 255, 0.05);
-        backdrop-filter: blur(12px);
-        -webkit-backdrop-filter: blur(12px);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 16px;
-        padding: 25px;
-        margin-bottom: 20px;
-        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
-    }
+# --- CONEXIÓN A MONGO ---
+MONGO_URI = "mongodb+srv://ANDRES_VANEGAS:CF32fUhOhrj70dY5@cluster0.dtureen.mongodb.net/?appName=Cluster0"
+client = MongoClient(MONGO_URI)
+db = client['NestleDB']
+visitas_col = db['Tareas']
 
-    /* Clases auxiliares para HTML personalizado */
-    .glass-header {
-        background: rgba(255, 255, 255, 0.07);
-        backdrop-filter: blur(10px);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        padding: 20px;
-        border-radius: 12px;
-        text-align: center;
-        margin-bottom: 25px;
-    }
-    
-    .glass-badge {
-        background: rgba(255, 255, 255, 0.15);
-        padding: 4px 10px;
-        border-radius: 20px;
-        font-size: 0.85em;
-        border: 1px solid rgba(255, 255, 255, 0.2);
-    }
-    
-    /* Personalización de botones */
-    .stButton>button {
-        background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%) !important;
-        color: white !important;
-        border: none !important;
-        border-radius: 8px !important;
-        padding: 8px 16px !important;
-        font-weight: 600 !important;
-        transition: all 0.3s ease !important;
-    }
-    .stButton>button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 5px 15px rgba(99, 102, 241, 0.4);
-    }
-</style>
-""", unsafe_allow_html=True)
+# --- PLANTILLA HTML (Integrada para fácil despliegue) ---
+HTML_TEMPLATE = """
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestión de Tareas - Nestlé DB</title>
+    <!-- Usamos Tailwind CSS para un diseño moderno y rápido sin hojas de estilo pesadas -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="bg-gray-50 font-sans text-gray-800">
 
-# ==========================================
-# 2. BASE DE DATOS (SQLITE)
-# ==========================================
-def init_db():
-    conn = sqlite3.connect("asana_glass.db", check_same_thread=False)
-    cursor = conn.cursor()
-    
-    # Tabla de Usuarios
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS usuarios (
-            username TEXT PRIMARY KEY,
-            password TEXT NOT NULL,
-            rol TEXT NOT NULL -- 'admin' o 'usuario'
-        )
-    """)
-    
-    # Tabla de Grupos
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS grupos (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            nombre TEXT UNIQUE NOT NULL,
-            descripcion TEXT
-        )
-    """)
-    
-    # Tabla de Miembros de Grupos (Muchos a Muchos)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS miembros_grupo (
-            grupo_id INTEGER,
-            username TEXT,
-            FOREIGN KEY(grupo_id) REFERENCES grupos(id) ON DELETE CASCADE,
-            FOREIGN KEY(username) REFERENCES usuarios(username) ON DELETE CASCADE,
-            PRIMARY KEY (grupo_id, username)
-        )
-    """)
-    
-    # Tabla de Tareas (Estilo Asana)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS tareas (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            titulo TEXT NOT NULL,
-            descripcion TEXT,
-            grupo_id INTEGER,
-            asignado_a TEXT,
-            fecha_entrega TEXT,
-            prioridad TEXT, -- 'Alta', 'Media', 'Baja'
-            estado TEXT, -- 'Por Hacer', 'En Progreso', 'Listo'
-            progreso INTEGER DEFAULT 0, -- 0 a 100%
-            FOREIGN KEY(grupo_id) REFERENCES grupos(id) ON DELETE CASCADE,
-            FOREIGN KEY(asignado_a) REFERENCES usuarios(username)
-        )
-    """)
-    
-    # Crear Administrador por defecto si no existe
-    cursor.execute("SELECT * FROM usuarios WHERE username = 'admin'")
-    if not cursor.fetchone():
-        cursor.execute("INSERT INTO usuarios VALUES ('admin', 'admin123', 'admin')")
-        
-    conn.commit()
-    return conn
-
-conn = init_db()
-
-# ==========================================
-# 3. CONTROL DE SESIÓN
-# ==========================================
-if "logged_in" not in st.session_state:
-    st.session_state.logged_in = False
-    st.session_state.username = None
-    st.session_state.rol = None
-
-def login_user(username, password):
-    cursor = conn.cursor()
-    cursor.execute("SELECT rol FROM usuarios WHERE username = ? AND password = ?", (username, password))
-    user = cursor.fetchone()
-    if user:
-        st.session_state.logged_in = True
-        st.session_state.username = username
-        st.session_state.rol = user[0]
-        st.rerun()
-    else:
-        st.error("Usuario o contraseña incorrectos")
-
-def logout_user():
-    st.session_state.logged_in = False
-    st.session_state.username = None
-    st.session_state.rol = None
-    st.rerun()
-
-# ==========================================
-# 4. INTERFAZ DE LOGIN (PANTALLA DE INICIO)
-# ==========================================
-if not st.session_state.logged_in:
-    st.markdown('<div class="glass-header"><h1>🔮 GlassAsana</h1><p>Gestión de proyectos con diseño transparente y elegante</p></div>', unsafe_allow_html=True)
-    
-    col1, col2, col3 = st.columns([1, 1.5, 1])
-    with col2:
-        st.markdown('<div class="glass-card">', unsafe_allow_html=True)
-        tab1, tab2 = st.tabs(["Iniciar Sesión", "Registrarse"])
-        
-        with tab1:
-            username_input = st.text_input("Usuario", key="login_user")
-            password_input = st.text_input("Contraseña", type="password", key="login_pass")
-            if st.button("Entrar", use_container_width=True):
-                login_user(username_input, password_input)
-                
-        with tab2:
-            reg_user = st.text_input("Nuevo Usuario", key="reg_user")
-            reg_pass = st.text_input("Nueva Contraseña", type="password", key="reg_pass")
-            if st.button("Crear Cuenta", use_container_width=True):
-                try:
-                    cursor = conn.cursor()
-                    cursor.execute("INSERT INTO usuarios VALUES (?, ?, ?)", (reg_user, reg_pass, 'usuario'))
-                    conn.commit()
-                    st.success("¡Registro exitoso! Ya puedes iniciar sesión.")
-                except sqlite3.IntegrityError:
-                    st.error("El nombre de usuario ya existe.")
-        st.markdown('</div>', unsafe_allow_html=True)
-    st.stop()
-
-# ==========================================
-# 5. MENÚ DE NAVEGACIÓN (SESIÓN INICIADA)
-# ==========================================
-st.sidebar.markdown(f"### 👤 Bienvenido, **{st.session_state.username}**")
-st.sidebar.markdown(f'<span class="glass-badge">Rol: {st.session_state.rol.upper()}</span>', unsafe_allow_html=True)
-st.sidebar.write("---")
-
-# Opciones de menú según el Rol
-menu_options = ["📋 Mi Tablero (Tareas)", "👥 Grupos"]
-if st.session_state.rol == 'admin':
-    menu_options.append("⚙️ Panel de Control (Admin)")
-
-choice = st.sidebar.radio("Navegación", menu_options)
-
-if st.sidebar.button("Cerrar Sesión", use_container_width=True):
-    logout_user()
-
-# ==========================================
-# 6. SECCIÓN: GRUPOS
-# ==========================================
-if choice == "👥 Grupos":
-    st.markdown("## 👥 Grupos de Trabajo")
-    
-    # Si es Admin, puede crear grupos y asignar personas
-    if st.session_state.rol == 'admin':
-        with st.expander("➕ Crear Nuevo Grupo de Trabajo"):
-            col_g1, col_g2 = st.columns([1, 2])
-            with col_g1:
-                nuevo_grupo = st.text_input("Nombre del Grupo")
-            with col_g2:
-                desc_grupo = st.text_input("Descripción breve")
-            if st.button("Crear Grupo"):
-                if nuevo_grupo:
-                    try:
-                        cursor = conn.cursor()
-                        cursor.execute("INSERT INTO grupos (nombre, descripcion) VALUES (?, ?)", (nuevo_grupo, desc_grupo))
-                        conn.commit()
-                        st.success(f"Grupo '{nuevo_grupo}' creado con éxito.")
-                        st.rerun()
-                    except sqlite3.IntegrityError:
-                        st.error("El grupo ya existe.")
-        
-        # Asignar miembros a grupos
-        with st.expander("👤 Asignar Miembros a Grupo"):
-            cursor = conn.cursor()
-            cursor.execute("SELECT id, nombre FROM grupos")
-            todos_grupos = cursor.fetchall()
-            cursor.execute("SELECT username FROM usuarios WHERE rol = 'usuario'")
-            todos_usuarios = [r[0] for r in cursor.fetchall()]
-            
-            if todos_grupos and todos_usuarios:
-                grupo_seleccionado = st.selectbox("Selecciona el Grupo", todos_grupos, format_func=lambda x: x[1])
-                user_seleccionado = st.selectbox("Selecciona el Usuario", todos_usuarios)
-                
-                if st.button("Añadir al Grupo"):
-                    try:
-                        cursor.execute("INSERT INTO miembros_grupo VALUES (?, ?)", (grupo_seleccionado[0], user_seleccionado))
-                        conn.commit()
-                        st.success(f"¡{user_seleccionado} añadido a {grupo_seleccionado[1]}!")
-                    except sqlite3.IntegrityError:
-                        st.warning("El usuario ya pertenece a este grupo.")
-            else:
-                st.info("Crea un grupo y asegúrate de tener usuarios registrados.")
-
-    # Mostrar Grupos a los que pertenece el usuario (o todos si es admin)
-    st.write("---")
-    st.write("### Mis Grupos Activos")
-    cursor = conn.cursor()
-    if st.session_state.rol == 'admin':
-        cursor.execute("SELECT id, nombre, descripcion FROM grupos")
-    else:
-        cursor.execute("""
-            SELECT g.id, g.nombre, g.descripcion FROM grupos g
-            JOIN miembros_grupo mg ON g.id = mg.grupo_id
-            WHERE mg.username = ?
-        """, (st.session_state.username,))
-    
-    mis_grupos = cursor.fetchall()
-    if mis_grupos:
-        for gid, gnom, gdesc in mis_grupos:
-            st.markdown(f"""
-            <div class="glass-card">
-                <h4>📂 {gnom}</h4>
-                <p style="color: #cbd5e1;">{gdesc or "Sin descripción"}</p>
+    <div class="min-h-screen flex flex-col">
+        <!-- Header -->
+        <header class="bg-blue-900 text-white shadow-md py-4 px-6 flex justify-between items-center">
+            <div class="flex items-center space-x-3">
+                <div class="bg-white p-2 rounded-lg">
+                    <span class="text-blue-900 font-bold text-xl">N</span>
+                </div>
+                <h1 class="text-xl font-bold tracking-wide">Nestlé DB - Panel de Tareas</h1>
             </div>
-            """, unsafe_allow_html=True)
-            
-            # Mostrar miembros del grupo
-            cursor.execute("SELECT username FROM miembros_grupo WHERE grupo_id = ?", (gid,))
-            miembros = [r[0] for r in cursor.fetchall()]
-            if miembros:
-                st.caption(f"👥 Miembros: {', '.join(miembros)}")
-            else:
-                st.caption("👥 Sin miembros asignados aún.")
-    else:
-        st.info("No estás asignado a ningún grupo actualmente.")
+            <div class="text-sm bg-blue-800 px-3 py-1.5 rounded-full">
+                <i class="fa-solid fa-database mr-1"></i> Conectado a MongoDB
+            </div>
+        </header>
 
-# ==========================================
-# 7. SECCIÓN: TABLERO DE TAREAS (ESTILO ASANA)
-# ==========================================
-elif choice == "📋 Mi Tablero (Tareas)":
-    st.markdown("## 📋 Tablero de Tareas")
+        <!-- Contenido Principal -->
+        <main class="flex-grow p-6 max-w-7xl mx-auto w-full">
+            <!-- Tarjetas de Resumen / Filtros -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-6">
+                <h2 class="text-lg font-semibold mb-4 text-gray-700 flex items-center">
+                    <i class="fa-solid fa-filter mr-2 text-blue-600"></i> Filtros de Búsqueda
+                </h2>
+                
+                <form id="filterForm" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Estado de Tarea</label>
+                        <select id="estadoFilter" class="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="">Todos</option>
+                            <option value="pendiente">Pendiente</option>
+                            <option value="completado">Completado</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Buscar por ID o Nombre</label>
+                        <input type="text" id="searchQuery" placeholder="Escribe para buscar..." class="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                    <div class="flex items-end">
+                        <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm px-4 py-2 rounded-lg transition-colors flex items-center justify-center space-x-2">
+                            <i class="fa-solid fa-magnifying-glass"></i>
+                            <span>Aplicar Filtros</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Tabla de Datos -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                <div class="px-6 py-4 border-b border-gray-100 flex justify-between items-center">
+                    <h3 class="font-bold text-gray-800 text-lg">Listado de Tareas</h3>
+                    <span id="recordCount" class="text-xs bg-gray-100 text-gray-600 px-2.5 py-1 rounded-full font-medium">0 registros</span>
+                </div>
+                
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="bg-gray-50 text-gray-400 text-xs uppercase font-semibold border-b border-gray-100">
+                                <th class="py-3.5 px-6">ID Tarea</th>
+                                <th class="py-3.5 px-6">Descripción</th>
+                                <th class="py-3.5 px-6">Estado</th>
+                                <th class="py-3.5 px-6">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tareasTableBody" class="divide-y divide-gray-100 text-sm">
+                            <!-- Los datos se inyectarán dinámicamente con JS -->
+                            <tr>
+                                <td colspan="4" class="text-center py-8 text-gray-400">
+                                    <i class="fa-solid fa-circle-notch animate-spin text-2xl mb-2 block"></i>
+                                    Cargando tareas de la base de datos...
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+
+        <!-- Footer -->
+        <footer class="bg-gray-100 border-t border-gray-200 text-center py-4 text-xs text-gray-500">
+            &copy; 2026 Nestlé DB Admin. Todos los derechos reservados.
+        </footer>
+    </div>
+
+    <!-- Lógica de Control en Frontend (JS) -->
+    <script>
+        // Función para cargar tareas desde nuestra API de Flask
+        async function loadTareas(filters = {}) {
+            const tbody = document.getElementById('tareasTableBody');
+            const recordCount = document.getElementById('recordCount');
+            
+            // Construir Query Params
+            const params = new URLSearchParams(filters).toString();
+            
+            try {
+                const response = await fetch(`/api/tareas?${params}`);
+                const data = await response.json();
+                
+                tbody.innerHTML = '';
+                recordCount.textContent = `${data.length} registros`;
+
+                if (data.length === 0) {
+                    tbody.innerHTML = `
+                        <tr>
+                            <td colspan="4" class="text-center py-8 text-gray-500">
+                                <i class="fa-solid fa-folder-open text-3xl mb-2 text-gray-300 block"></i>
+                                No se encontraron tareas que coincidan con la búsqueda.
+                            </td>
+                        </tr>`;
+                    return;
+                }
+
+                data.forEach(tarea => {
+                    const statusClass = tarea.estado === 'completado' 
+                        ? 'bg-green-100 text-green-800' 
+                        : 'bg-yellow-100 text-yellow-800';
+
+                    // Convertir ID de Mongo para mostrar
+                    const mongoId = tarea._id?.$oid || tarea._id || 'N/A';
+
+                    tbody.innerHTML += `
+                        <tr class="hover:bg-gray-50/75 transition-colors">
+                            <td class="py-4 px-6 font-mono text-xs text-blue-600">${mongoId.substring(0, 8)}...</td>
+                            <td class="py-4 px-6 text-gray-700">${tarea.descripcion || 'Sin descripción'}</td>
+                            <td class="py-4 px-6">
+                                <span class="px-2.5 py-1 rounded-full text-xs font-semibold ${statusClass}">
+                                    ${tarea.estado || 'pendiente'}
+                                </span>
+                            </td>
+                            <td class="py-4 px-6">
+                                <button onclick="verDetalle('${mongoId}')" class="text-blue-600 hover:text-blue-800 font-medium hover:underline text-xs">
+                                    <i class="fa-regular fa-eye mr-1"></i> Ver Detalles
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                });
+
+            } catch (error) {
+                console.error("Error al cargar tareas:", error);
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="4" class="text-center py-8 text-red-500">
+                            <i class="fa-solid fa-triangle-exclamation text-3xl mb-2 block"></i>
+                            Ocurrió un error al cargar los datos desde el servidor.
+                        </td>
+                    </tr>`;
+            }
+        }
+
+        // Listener del Formulario de Filtros
+        document.getElementById('filterForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const estado = document.getElementById('estadoFilter').value;
+            const search = document.getElementById('searchQuery').value;
+            
+            loadTareas({ estado: estado, q: search });
+        });
+
+        // Detalle de tarea (ejemplo de interacción rápida)
+        function verDetalle(id) {
+            alert("Consultando detalles del ID en MongoDB: " + id);
+        }
+
+        // Carga inicial al abrir la página
+        document.addEventListener('DOMContentLoaded', () => loadTareas());
+    </script>
+</body>
+</html>
+"""
+
+# --- RUTAS DE FLASK ---
+
+@app.route('/')
+def index():
+    # Renderizamos la interfaz HTML directamente
+    return render_template_string(HTML_TEMPLATE)
+
+@app.route('/api/tareas', methods=['GET'])
+def get_tareas():
+    """
+    Endpoint tipo API para que el HTML consulte los datos de forma asíncrona.
+    Soporta filtros rápidos de búsqueda.
+    """
+    query = {}
     
-    # Crear Tarea (Solo Admin o miembros del grupo)
-    with st.expander("➕ Crear Nueva Tarea estilo Asana"):
-        cursor = conn.cursor()
-        if st.session_state.rol == 'admin':
-            cursor.execute("SELECT id, nombre FROM grupos")
-        else:
-            cursor.execute("SELECT g.id, g.nombre FROM grupos g JOIN miembros_grupo mg ON g.id = mg.grupo_id WHERE mg.username = ?", (st.session_state.username,))
-        grupos_disponibles = cursor.fetchall()
+    # Filtro por estado
+    estado = request.args.get('estado')
+    if estado:
+        query['estado'] = estado
         
-        if grupos_disponibles:
-            col_t1, col_t2 = st.columns(2)
-            with col_t1:
-                t_titulo = st.text_input("Título de la Tarea")
-                t_desc = st.text_area("Descripción de la Tarea")
-                t_grupo = st.selectbox("Grupo Destinado", grupos_disponibles, format_func=lambda x: x[1])
-            with col_t2:
-                # Obtener miembros del grupo seleccionado para asignar la tarea
-                cursor.execute("SELECT username FROM miembros_grupo WHERE grupo_id = ?", (t_grupo[0],))
-                miembros_del_grupo = [r[0] for r in cursor.fetchall()]
-                if not miembros_del_grupo:
-                    miembros_del_grupo = [st.session_state.username]
-                
-                t_asignado = st.selectbox("Asignar A", miembros_del_grupo)
-                t_fecha = st.date_input("Fecha de Entrega", datetime.now())
-                t_prioridad = st.selectbox("Prioridad", ["Baja", "Media", "Alta"])
-                t_estado = st.selectbox("Estado Inicial", ["Por Hacer", "En Progreso", "Listo"])
-                
-            if st.button("Publicar Tarea en Asana"):
-                if t_titulo:
-                    cursor.execute("""
-                        INSERT INTO tareas (titulo, descripcion, grupo_id, asignado_a, fecha_entrega, prioridad, estado)
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
-                    """, (t_titulo, t_desc, t_grupo[0], t_asignado, str(t_fecha), t_prioridad, t_estado))
-                    conn.commit()
-                    st.success("Tarea creada exitosamente.")
-                    st.rerun()
-        else:
-            st.warning("Debes pertenecer o crear al menos un grupo para agendar tareas.")
+    # Filtro por texto libre (búsqueda)
+    search_q = request.args.get('q')
+    if search_q:
+        # Busca texto que contenga el término (case-insensitive)
+        query['descripcion'] = {'$regex': search_q, '$options': 'i'}
 
-    # Filtros de visualización
-    st.write("---")
-    f_col1, f_col2 = st.columns(2)
-    with f_col1:
-        filtro_estado = st.multiselect("Filtrar por Estado", ["Por Hacer", "En Progreso", "Listo"], default=["Por Hacer", "En Progreso"])
-    with f_col2:
-        filtro_prioridad = st.multiselect("Filtrar por Prioridad", ["Baja", "Media", "Alta"], default=["Baja", "Media", "Alta"])
-
-    # Obtención de tareas de los grupos del usuario
-    cursor = conn.cursor()
-    if st.session_state.rol == 'admin':
-        query = "SELECT t.id, t.titulo, t.descripcion, g.nombre, t.asignado_a, t.fecha_entrega, t.prioridad, t.estado, t.progreso FROM tareas t JOIN grupos g ON t.grupo_id = g.id WHERE 1=1"
-        params = []
-    else:
-        query = """
-            SELECT t.id, t.titulo, t.descripcion, g.nombre, t.asignado_a, t.fecha_entrega, t.prioridad, t.estado, t.progreso 
-            FROM tareas t 
-            JOIN grupos g ON t.grupo_id = g.id 
-            WHERE t.grupo_id IN (SELECT grupo_id FROM miembros_grupo WHERE username = ?)
-        """
-        params = [st.session_state.username]
-
-    if filtro_estado:
-        query += f" AND t.estado IN ({','.join(['?']*len(filtro_estado))})"
-        params.extend(filtro_estado)
-    if filtro_prioridad:
-        query += f" AND t.prioridad IN ({','.join(['?']*len(filtro_prioridad))})"
-        params.extend(filtro_prioridad)
-
-    cursor.execute(query, params)
-    tareas = cursor.fetchall()
-
-    # Mostrar Tareas estilo Kanban / Tarjetas Modernas
-    if tareas:
-        for tid, tit, desc, gnom, asig, fecha, prio, est, prog in tareas:
-            st.markdown(f'<div class="glass-card">', unsafe_allow_html=True)
-            col_card1, col_card2 = st.columns([3, 1])
-            
-            with col_card1:
-                st.markdown(f"### 📌 {tit}")
-                st.markdown(f"**Descripción:** {desc or 'Sin descripción disponible.'}")
-                st.markdown(f"📂 **Grupo:** `{gnom}` | 👤 **Asignado a:** `{asig}` | 📅 **Entrega:** `{fecha}`")
-            
-            with col_card2:
-                # Color dinámico de la prioridad
-                color_prio = "🟢" if prio == "Baja" else "🟡" if prio == "Media" else "🔴"
-                st.markdown(f"{color_prio} **Prioridad:** {prio}")
-                
-                # Actualizar progreso y estado de forma interactiva
-                nuevo_est = st.selectbox("Estado", ["Por Hacer", "En Progreso", "Listo"], index=["Por Hacer", "En Progreso", "Listo"].index(est), key=f"est_{tid}")
-                nuevo_prog = st.slider("Avance (%)", 0, 100, prog, step=10, key=f"prog_{tid}")
-                
-                # Botón rápido para guardar cambios en cada tarea
-                if st.button("Actualizar Tarea", key=f"btn_{tid}"):
-                    cursor.execute("UPDATE tareas SET estado = ?, progreso = ? WHERE id = ?", (nuevo_est, nuevo_prog, tid))
-                    conn.commit()
-                    st.success("Guardado")
-                    st.rerun()
-            
-            # Barra de Progreso visual elegante
-            st.progress(nuevo_prog / 100)
-            st.markdown('</div>', unsafe_allow_html=True)
-            st.write("")
-    else:
-        st.info("No hay tareas que coincidan con los filtros aplicados.")
-
-# ==========================================
-# 8. SECCIÓN: PANEL DE CONTROL (SÓLO ADMIN)
-# ==========================================
-elif choice == "⚙️ Panel de Control (Admin)":
-    st.markdown("## ⚙️ Panel de Control del Administrador")
+    # Traemos las tareas (limitado a 50 para optimizar el rendimiento inicial)
+    tareas = list(visitas_col.find(query).limit(50))
     
-    # Vista general rápida de usuarios registrados
-    st.write("### Usuarios Registrados")
-    df_users = pd.read_sql_query("SELECT username, rol FROM usuarios", conn)
-    st.dataframe(df_users, use_container_width=True)
-    
-    # Eliminar grupos o tareas para mantenimiento
-    st.write("### Acciones de Limpieza")
-    cursor = conn.cursor()
-    cursor.execute("SELECT id, nombre FROM grupos")
-    grupos_eliminar = cursor.fetchall()
-    
-    if grupos_eliminar:
-        del_grupo = st.selectbox("Selecciona un grupo para eliminar permanentemente", grupos_eliminar, format_func=lambda x: x[1])
-        if st.button("⚠️ Eliminar Grupo"):
-            cursor.execute("DELETE FROM grupos WHERE id = ?", (del_grupo[0],))
-            conn.commit()
-            st.success("Grupo eliminado exitosamente.")
-            st.rerun()
+    # Serializar BSON de MongoDB a formato JSON estándar
+    return json_util.dumps(tareas), 200, {'Content-Type': 'application/json'}
+
+if __name__ == '__main__':
+    # Habilitamos modo debug para facilitar el desarrollo en local
+    app.run(debug=True, port=5000)
