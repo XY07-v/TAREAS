@@ -229,5 +229,9 @@ def get_tareas():
     return json_util.dumps(tareas), 200, {'Content-Type': 'application/json'}
 
 if __name__ == '__main__':
-    # Habilitamos modo debug para facilitar el desarrollo en local
-    app.run(debug=True, port=5000)
+    # Render asigna un puerto dinámico en la variable de entorno 'PORT'. 
+    # Si no existe (en tu local), usa el 5000 por defecto.
+    port = int(os.environ.get("PORT", 5000))
+    
+    # IMPORTANTE: host="0.0.0.0" es la clave para que Render pueda escanear el puerto.
+    app.run(host="0.0.0.0", port=port, debug=False)
