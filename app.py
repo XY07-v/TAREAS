@@ -1,13 +1,12 @@
 import os
 import json
-from datetime import datetime
-import pytz  # Para manejar con precisión la hora de Colombia
+from datetime import datetime, timezone, timedelta
 from flask import Flask, render_template_string, request, jsonify, redirect, url_for, session
 from pymongo import MongoClient
 from bson import ObjectId, json_util
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("SECRET_KEY", "nestle_liquid_secret_2026")
+app.secret_key = os.environ.get("SECRET_KEY", "nestle_liquid_light_2026")
 
 # --- CONEXIÓN A MONGO ---
 MONGO_URI = "mongodb+srv://ANDRES_VANEGAS:CF32fUhOhrj70dY5@cluster0.dtureen.mongodb.net/?appName=Cluster0"
@@ -17,62 +16,61 @@ visitas_col = db['Tareas']
 usuarios_col = db['Usuarios']
 grupos_col = db['Grupos']
 
-# Zona horaria de Colombia
-CO_TZ = pytz.timezone('America/Bogota')
+# Zona horaria de Colombia nativa (UTC -5)
+CO_TZ = timezone(timedelta(hours=-5))
 
-# --- PLANTILLA DEL LOGIN (Liquid Glass Style) ---
+# --- PLANTILLA DEL LOGIN (Liquid Glass Light Style) ---
 LOGIN_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Iniciar Sesión - Nestlé Liquid</title>
+    <title>Iniciar Sesión - Nestlé Workspace</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
         body {
             font-family: 'Plus Jakarta Sans', sans-serif;
-            background: radial-gradient(circle at 10% 20%, rgba(0, 149, 218, 0.15) 0%, rgba(0, 0, 0, 0) 40%),
-                        radial-gradient(circle at 90% 80%, rgba(251, 146, 60, 0.1) 0%, rgba(0, 0, 0, 0) 50%),
-                        #0f172a;
+            background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
+            background-attachment: fixed;
         }
-        .liquid-glass {
-            background: rgba(255, 255, 255, 0.03);
-            backdrop-filter: blur(16px);
-            -webkit-backdrop-filter: blur(16px);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        .liquid-glass-light {
+            background: rgba(255, 255, 255, 0.45);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.6);
+            box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.05), 
+                        inset 0 1px 1px rgba(255, 255, 255, 0.5);
         }
     </style>
 </head>
 <body class="flex items-center justify-center min-h-screen p-4">
-    <div class="liquid-glass p-8 md:p-10 rounded-3xl w-full max-w-md text-white">
+    <div class="liquid-glass-light p-8 md:p-10 rounded-3xl w-full max-w-md text-slate-800">
         <div class="flex flex-col items-center mb-8">
-            <div class="w-16 h-16 rounded-2xl bg-gradient-to-tr from-blue-500 to-indigo-600 flex items-center justify-center mb-4 shadow-lg shadow-blue-500/20">
-                <span class="text-2xl font-extrabold tracking-wider">N</span>
+            <div class="w-16 h-16 rounded-2xl bg-gradient-to-tr from-blue-500 to-indigo-500 flex items-center justify-center mb-4 shadow-md shadow-blue-500/20">
+                <span class="text-2xl font-extrabold text-white tracking-wider">N</span>
             </div>
-            <h2 class="text-2xl font-extrabold tracking-tight">Nestlé Workspace</h2>
-            <p class="text-xs text-slate-400 mt-1.5">Diseño Liquid Glass • Workspace Profesional</p>
+            <h2 class="text-2xl font-extrabold tracking-tight text-slate-900">Nestlé Portal</h2>
+            <p class="text-xs text-slate-500 mt-1.5">Liquid Glass Light Edition</p>
         </div>
         
         {% if error %}
-            <div class="bg-red-500/10 border border-red-500/20 text-red-300 p-3.5 rounded-2xl text-xs mb-5 flex items-center space-x-2">
-                <i class="fa-solid fa-circle-exclamation text-red-400"></i>
-                <span>{{ error }}</span>
+            <div class="bg-red-500/10 border border-red-500/20 text-red-700 p-3.5 rounded-2xl text-xs mb-5 flex items-center space-x-2">
+                <span>⚠️ {{ error }}</span>
             </div>
         {% endif %}
 
         <form action="/login" method="POST" class="space-y-4">
             <div>
-                <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Usuario</label>
-                <input type="text" name="username" required placeholder="Tu usuario" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white/10 transition-all">
+                <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Usuario</label>
+                <input type="text" name="username" required placeholder="Tu usuario" class="w-full bg-white/60 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all">
             </div>
             <div>
-                <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Contraseña</label>
-                <input type="password" name="password" required placeholder="••••••••" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white/10 transition-all">
+                <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Contraseña</label>
+                <input type="password" name="password" required placeholder="••••••••" class="w-full bg-white/60 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all">
             </div>
-            <button type="submit" class="w-full bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white font-bold py-3.5 rounded-xl transition-all shadow-lg shadow-blue-500/10 text-xs uppercase tracking-wider mt-2">
-                Entrar al Portal
+            <button type="submit" class="w-full bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white font-bold py-3.5 rounded-xl transition-all shadow-md text-xs uppercase tracking-wider mt-2">
+                Iniciar Sesión
             </button>
         </form>
     </div>
@@ -80,85 +78,87 @@ LOGIN_TEMPLATE = """
 </html>
 """
 
-# --- PLANTILLA PRINCIPAL (HTML Liquid Glass) ---
+# --- PLANTILLA PRINCIPAL (Liquid Glass Light HTML) ---
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Nestlé Liquid Workspace</title>
+    <title>Nestlé Light Workspace</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         body {
             font-family: 'Plus Jakarta Sans', sans-serif;
-            background: radial-gradient(circle at 0% 0%, rgba(30, 64, 175, 0.12) 0%, rgba(0, 0, 0, 0) 45%),
-                        radial-gradient(circle at 100% 100%, rgba(249, 115, 22, 0.08) 0%, rgba(0, 0, 0, 0) 50%),
-                        #0b0f19;
+            background: radial-gradient(circle at 0% 0%, rgba(59, 130, 246, 0.08) 0%, rgba(255, 255, 255, 0) 50%),
+                        radial-gradient(circle at 100% 100%, rgba(249, 115, 22, 0.05) 0%, rgba(255, 255, 255, 0) 50%),
+                        #f8fafc;
         }
         .liquid-glass-panel {
-            background: rgba(255, 255, 255, 0.015);
+            background: rgba(255, 255, 255, 0.45);
             backdrop-filter: blur(20px);
             -webkit-backdrop-filter: blur(20px);
-            border: 1px solid rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.7);
+            box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.04);
         }
         .liquid-glass-card {
-            background: rgba(255, 255, 255, 0.01);
-            border: 1px solid rgba(255, 255, 255, 0.04);
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            background: rgba(255, 255, 255, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.6);
+            transition: all 0.25s ease;
         }
         .liquid-glass-card:hover {
-            background: rgba(255, 255, 255, 0.03);
-            border: 1px solid rgba(255, 255, 255, 0.09);
+            background: rgba(255, 255, 255, 0.65);
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            box-shadow: 0 10px 20px -10px rgba(0, 0, 0, 0.05);
         }
         .custom-scrollbar::-webkit-scrollbar { width: 5px; height: 5px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 10px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.2); }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.08); border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(0, 0, 0, 0.15); }
     </style>
 </head>
-<body class="text-slate-100 h-screen overflow-hidden flex p-4 md:p-6 gap-6">
+<body class="text-slate-700 h-screen overflow-hidden flex p-4 md:p-6 gap-6">
 
     <!-- BARRA LATERAL (SIDEBAR) -->
     <aside class="w-64 liquid-glass-panel rounded-3xl flex flex-col justify-between h-full flex-shrink-0 overflow-hidden">
         <div>
-            <!-- Perfil / Logo -->
-            <div class="p-6 border-b border-white/5 flex items-center space-x-3">
-                <img id="myAvatar" src="{{ current_user_avatar }}" class="w-10 h-10 rounded-xl object-cover border border-white/10" alt="Mi Foto">
+            <!-- Perfil de Usuario -->
+            <div class="p-6 border-b border-slate-200/50 flex items-center space-x-3">
+                <img id="myAvatar" src="{{ current_user_avatar }}" class="w-10 h-10 rounded-xl object-cover border border-slate-200 shadow-sm" alt="Mi Foto">
                 <div class="truncate">
-                    <h1 class="font-bold text-sm tracking-tight text-white">{{ username }}</h1>
-                    <span class="text-[9px] font-bold text-blue-400 uppercase tracking-widest">{{ user_role }}</span>
+                    <h1 class="font-bold text-sm tracking-tight text-slate-900">{{ username }}</h1>
+                    <span class="text-[9px] font-bold text-blue-600 uppercase tracking-widest">{{ user_role }}</span>
                 </div>
             </div>
 
             <!-- Navegación -->
             <div class="p-4 space-y-1">
-                <div class="text-[9px] font-bold text-slate-500 uppercase px-3 mb-2 tracking-wider">Módulos</div>
-                <button onclick="switchTab('tareasTab')" class="tab-btn w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-semibold bg-white/5 text-white transition-all">
-                    <i class="fa-solid fa-layer-group text-blue-400"></i>
+                <div class="text-[9px] font-bold text-slate-400 uppercase px-3 mb-2 tracking-wider">Menú Colaborativo</div>
+                <button onclick="switchTab('tareasTab')" class="tab-btn w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-semibold bg-white/60 text-slate-900 shadow-sm transition-all">
+                    <i class="fa-solid fa-layer-group text-blue-500"></i>
                     <span>Bandeja de Tareas</span>
                 </button>
-                <button onclick="switchTab('gruposTab')" class="tab-btn w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-semibold text-slate-400 hover:text-white transition-all">
-                    <i class="fa-solid fa-users text-purple-400"></i>
+                <button onclick="switchTab('gruposTab')" class="tab-btn w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-semibold text-slate-500 hover:text-slate-900 transition-all">
+                    <i class="fa-solid fa-users text-purple-500"></i>
                     <span>Ver Grupos y Miembros</span>
                 </button>
                 {% if user_role == 'admin' %}
-                <button onclick="switchTab('adminTab')" class="tab-btn w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-semibold text-slate-400 hover:text-white transition-all">
-                    <i class="fa-solid fa-user-gear text-orange-400"></i>
-                    <span>Administración de Personal</span>
+                <button onclick="switchTab('adminTab')" class="tab-btn w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-semibold text-slate-500 hover:text-slate-900 transition-all">
+                    <i class="fa-solid fa-user-gear text-orange-500"></i>
+                    <span>Administración / Personal</span>
                 </button>
                 {% endif %}
-                <button onclick="switchTab('perfilTab')" class="tab-btn w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-semibold text-slate-400 hover:text-white transition-all">
-                    <i class="fa-solid fa-user-astronaut text-green-400"></i>
+                <button onclick="switchTab('perfilTab')" class="tab-btn w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-semibold text-slate-500 hover:text-slate-900 transition-all">
+                    <i class="fa-solid fa-user-astronaut text-green-500"></i>
                     <span>Mi Perfil (Foto)</span>
                 </button>
             </div>
         </div>
 
-        <div class="p-4 border-t border-white/5">
-            <a href="/logout" class="w-full flex items-center justify-center space-x-2 py-2.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-300 font-bold text-xs transition-colors border border-red-500/10">
+        <div class="p-4 border-t border-slate-200/50">
+            <a href="/logout" class="w-full flex items-center justify-center space-x-2 py-2.5 rounded-xl bg-red-50 hover:bg-red-100 text-red-600 font-bold text-xs transition-colors border border-red-100">
                 <i class="fa-solid fa-power-off"></i>
                 <span>Cerrar Sesión</span>
             </a>
@@ -173,25 +173,25 @@ HTML_TEMPLATE = """
             <!-- Header Tareas -->
             <header class="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                    <h2 class="text-2xl font-extrabold text-white tracking-tight">Mis Tareas Colaborativas</h2>
-                    <p class="text-xs text-slate-400">Gestión de actividades de grupos e individuales</p>
+                    <h2 class="text-2xl font-extrabold text-slate-900 tracking-tight">Tareas del Equipo</h2>
+                    <p class="text-xs text-slate-500">Doble asignación: Grupo Responsable + Encargado de Tarea</p>
                 </div>
                 
-                <!-- Filtros Liquid Glass -->
+                <!-- Filtros -->
                 <div class="flex items-center gap-3">
-                    <select id="filtroGrupo" onchange="applyFilters()" class="text-xs font-semibold text-slate-300 bg-white/5 border border-white/10 rounded-xl px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-500">
-                        <option value="" class="bg-slate-900">Todos los Grupos / Individual</option>
-                        <option value="individual" class="bg-slate-900">Solo Individuales (Sin Grupo)</option>
+                    <select id="filtroGrupo" onchange="applyFilters()" class="text-xs font-semibold text-slate-600 bg-white/70 border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-400">
+                        <option value="">Todos los Grupos / Áreas</option>
+                        <option value="Varios">Sueltas (Grupo: Varios)</option>
                         {% for g in lista_grupos %}
-                            <option value="{{ g.nombre }}" class="bg-slate-900">{{ g.nombre }}</option>
+                            <option value="{{ g.nombre }}">{{ g.nombre }}</option>
                         {% endfor %}
                     </select>
-                    <select id="estadoFilter" onchange="applyFilters()" class="text-xs font-semibold text-slate-300 bg-white/5 border border-white/10 rounded-xl px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-500">
-                        <option value="" class="bg-slate-900">Cualquier Estado</option>
-                        <option value="pendiente" class="bg-slate-900">Pendientes</option>
-                        <option value="completado" class="bg-slate-900">Completadas</option>
+                    <select id="estadoFilter" onchange="applyFilters()" class="text-xs font-semibold text-slate-600 bg-white/70 border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-400">
+                        <option value="">Cualquier Estado</option>
+                        <option value="pendiente">Pendientes</option>
+                        <option value="completado">Completadas</option>
                     </select>
-                    <input type="text" id="searchQuery" oninput="applyFilters()" placeholder="Buscar tarea..." class="text-xs text-white placeholder-slate-500 bg-white/5 border border-white/10 rounded-xl px-3.5 py-2 focus:outline-none focus:ring-1 focus:ring-blue-500 w-44">
+                    <input type="text" id="searchQuery" oninput="applyFilters()" placeholder="Buscar tarea..." class="text-xs text-slate-700 placeholder-slate-400 bg-white/70 border border-slate-200 rounded-xl px-3.5 py-2 focus:outline-none focus:ring-1 focus:ring-blue-400 w-44">
                 </div>
             </header>
 
@@ -202,44 +202,48 @@ HTML_TEMPLATE = """
                     {% if user_role == 'admin' %}
                     <!-- ACCIÓN ADMIN: Crear Tarea -->
                     <div class="liquid-glass-panel rounded-2xl p-5 mb-4">
-                        <h3 class="text-xs font-bold text-blue-400 uppercase tracking-widest mb-4"><i class="fa-solid fa-circle-plus mr-2"></i>Nueva Tarea</h3>
-                        <form action="/admin/crear-tarea" method="POST" class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <input type="text" name="descripcion" required placeholder="Descripción de la tarea..." class="bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none">
-                            <select name="asignado_tipo_id" required class="bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-slate-300 focus:outline-none">
-                                <option value="" class="bg-slate-900 text-slate-400">Asignar a...</option>
-                                <optgroup label="Colaboradores Individuales" class="bg-slate-900 text-white">
-                                    {% for u in lista_usuarios %}
-                                        <option value="user:{{ u.username }}">{{ u.username }}</option>
-                                    {% endfor %}
-                                </optgroup>
-                                <optgroup label="Grupos" class="bg-slate-900 text-white">
-                                    {% for g in lista_grupos %}
-                                        <option value="group:{{ g.nombre }}">{{ g.nombre }}</option>
-                                    {% endfor %}
-                                </optgroup>
+                        <h3 class="text-xs font-bold text-blue-600 uppercase tracking-widest mb-4"><i class="fa-solid fa-circle-plus mr-2"></i>Nueva Tarea Con Doble Asignación</h3>
+                        <form action="/admin/crear-tarea" method="POST" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                            <input type="text" name="descripcion" required placeholder="¿Qué se debe hacer?..." class="bg-white/80 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-800 placeholder-slate-450 focus:outline-none">
+                            
+                            <!-- Selección de Área/Grupo -->
+                            <select name="grupo_asignado" required class="bg-white/80 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-600 focus:outline-none">
+                                <option value="Varios">Grupo/Área: Varios (Sueltas)</option>
+                                {% for g in lista_grupos %}
+                                    <option value="{{ g.nombre }}">Área: {{ g.nombre }}</option>
+                                {% endfor %}
                             </select>
+
+                            <!-- Selección de Responsable -->
+                            <select name="persona_asignada" required class="bg-white/80 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-600 focus:outline-none">
+                                <option value="">Persona Responsable...</option>
+                                {% for u in lista_usuarios %}
+                                    <option value="{{ u.username }}">{{ u.username }}</option>
+                                {% endfor %}
+                            </select>
+
                             <div class="flex gap-2">
-                                <input type="date" name="fecha_entrega" required class="bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-slate-300 focus:outline-none flex-grow">
+                                <input type="date" name="fecha_entrega" required class="bg-white/80 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-600 focus:outline-none flex-grow">
                                 <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 rounded-xl text-xs transition-colors">Asignar</button>
                             </div>
                         </form>
                     </div>
                     {% endif %}
 
-                    <!-- Tabla de Tareas Estilo Liquid -->
+                    <!-- Tabla de Tareas Estilo Liquid Claro -->
                     <div class="liquid-glass-panel rounded-2xl overflow-hidden">
                         <table class="w-full text-left border-collapse text-xs">
                             <thead>
-                                <tr class="border-b border-white/5 bg-white/2 text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-                                    <th class="py-3.5 px-6 w-12 text-center">Check</th>
+                                <tr class="border-b border-slate-200 bg-slate-50/50 text-[10px] text-slate-500 font-bold uppercase tracking-wider">
+                                    <th class="py-3.5 px-6 w-12 text-center">Estado</th>
                                     <th class="py-3.5 px-6">Descripción</th>
-                                    <th class="py-3.5 px-6">Origen de Asignación</th>
-                                    <th class="py-3.5 px-6">Fecha de Entrega</th>
-                                    <th class="py-3.5 px-6">Novedades</th>
-                                    <th class="py-3.5 px-6 text-right">Detalle</th>
+                                    <th class="py-3.5 px-6">Área / Grupo</th>
+                                    <th class="py-3.5 px-6">Asignado A</th>
+                                    <th class="py-3.5 px-6">Vence</th>
+                                    <th class="py-3.5 px-6 text-right">Acciones</th>
                                 </tr>
                             </thead>
-                            <tbody id="tareasTableBody" class="divide-y divide-white/5">
+                            <tbody id="tareasTableBody" class="divide-y divide-slate-100">
                                 <!-- Cargado dinámicamente -->
                             </tbody>
                         </table>
@@ -247,55 +251,63 @@ HTML_TEMPLATE = """
 
                 </div>
 
-                <!-- PANEL DETALLE LATERAL (Slide-out de Asana) -->
+                <!-- PANEL DETALLE LATERAL (Notas y Novedades) -->
                 <div id="asanaDetailPanel" class="w-96 liquid-glass-panel rounded-2xl h-full flex flex-col justify-between hidden flex-shrink-0">
                     <div class="p-6 space-y-5 overflow-y-auto custom-scrollbar flex-grow">
                         <div class="flex items-center justify-between">
-                            <span class="text-[10px] font-bold text-blue-400 uppercase tracking-widest">Actividad Detallada</span>
-                            <button onclick="closeDetailPanel()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-times"></i></button>
+                            <span class="text-[10px] font-bold text-blue-600 uppercase tracking-widest">Panel de Detalle</span>
+                            <button onclick="closeDetailPanel()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-times"></i></button>
                         </div>
 
-                        <!-- Edición de Tarea (Solo Admin) -->
-                        <div id="editTaskSection" class="hidden space-y-3 bg-white/5 p-4 rounded-xl border border-white/5">
-                            <span class="text-[10px] font-bold text-orange-400 uppercase tracking-widest">Editar Tarea (Admin)</span>
-                            <input type="text" id="editDescripcion" class="w-full bg-slate-900 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white">
-                            <div class="grid grid-cols-2 gap-2">
-                                <input type="date" id="editFecha" class="bg-slate-900 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-slate-300">
-                                <select id="editAsignado" class="bg-slate-900 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-slate-300">
-                                    {% for u in lista_usuarios %}
-                                        <option value="user:{{ u.username }}">Individual: {{ u.username }}</option>
-                                    {% endfor %}
+                        <!-- Edición Avanzada (Solo Admin) -->
+                        <div id="editTaskSection" class="hidden space-y-3 bg-slate-50 p-4 rounded-xl border border-slate-100">
+                            <span class="text-[10px] font-bold text-orange-600 uppercase tracking-widest">Modificar Tarea</span>
+                            
+                            <input type="text" id="editDescripcion" class="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-800">
+                            
+                            <div class="space-y-2">
+                                <label class="text-[9px] font-bold text-slate-400 block uppercase">Asignación de Grupo y Persona</label>
+                                <select id="editGrupo" class="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700">
+                                    <option value="Varios">Varios (Sueltas)</option>
                                     {% for g in lista_grupos %}
-                                        <option value="group:{{ g.nombre }}">Grupo: {{ g.nombre }}</option>
+                                        <option value="{{ g.nombre }}">{{ g.nombre }}</option>
+                                    {% endfor %}
+                                </select>
+                                <select id="editResponsable" class="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700">
+                                    {% for u in lista_usuarios %}
+                                        <option value="{{ u.username }}">{{ u.username }}</option>
                                     {% endfor %}
                                 </select>
                             </div>
-                            <button onclick="guardarEdicionTarea()" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-1.5 rounded-lg text-xs transition-colors">Actualizar Tarea</button>
+
+                            <input type="date" id="editFecha" class="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700">
+                            
+                            <button onclick="guardarEdicionTarea()" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-1.5 rounded-lg text-xs transition-colors">Guardar Modificaciones</button>
                         </div>
 
-                        <!-- Info de solo lectura -->
+                        <!-- Detalle lectura -->
                         <div id="readTaskSection" class="space-y-3">
-                            <h3 id="detailTitle" class="text-sm font-bold text-white"></h3>
-                            <div class="flex gap-4 text-xs text-slate-400">
-                                <div><span class="font-semibold text-slate-200">Asignado:</span> <span id="detailAsignado">-</span></div>
-                                <div><span class="font-semibold text-slate-200">Entrega:</span> <span id="detailFechaText">-</span></div>
+                            <h3 id="detailTitle" class="text-sm font-bold text-slate-900"></h3>
+                            <div class="grid grid-cols-2 gap-2 text-xs text-slate-600 bg-white/50 p-3 rounded-lg border border-slate-100">
+                                <div><span class="text-[9px] uppercase font-bold text-slate-400 block">Grupo/Área</span><span id="detailGrupo" class="font-semibold">-</span></div>
+                                <div><span class="text-[9px] uppercase font-bold text-slate-400 block">Encargado</span><span id="detailAsignado" class="font-semibold">-</span></div>
                             </div>
                         </div>
 
-                        <hr class="border-white/5">
+                        <hr class="border-slate-200">
 
-                        <!-- Conversaciones / Comentarios -->
+                        <!-- Novedades -->
                         <div class="space-y-3">
-                            <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center">
-                                <i class="fa-regular fa-comment-dots mr-2 text-blue-400"></i> Novedades (Hora Col)
+                            <h4 class="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center">
+                                <i class="fa-regular fa-comment-dots mr-2 text-blue-500"></i> Notas y Novedades (Colombia)
                             </h4>
                             <div class="space-y-2">
-                                <textarea id="nuevaNotaInput" placeholder="Añadir una nota o novedad..." rows="2" class="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-xs text-white focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"></textarea>
-                                <button onclick="guardarNovedad()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-3 py-1.5 rounded-lg text-xs transition-colors">Enviar Nota</button>
+                                <textarea id="nuevaNotaInput" placeholder="Añadir comentarios, novedades..." rows="2" class="w-full bg-white border border-slate-200 rounded-xl p-3 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-400 resize-none"></textarea>
+                                <button onclick="guardarNovedad()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-3 py-1.5 rounded-lg text-xs transition-colors">Guardar Nota</button>
                             </div>
 
                             <div id="notasContainer" class="space-y-2 max-h-56 overflow-y-auto custom-scrollbar">
-                                <!-- Inyección -->
+                                <!-- Cargado dinámicamente -->
                             </div>
                         </div>
                     </div>
@@ -306,42 +318,51 @@ HTML_TEMPLATE = """
         <!-- ================= TAB: GRUPOS ================= -->
         <div id="gruposTab" class="tab-content flex-grow flex flex-col h-full overflow-hidden hidden">
             <header class="mb-6">
-                <h2 class="text-2xl font-extrabold text-white tracking-tight">Grupos de Trabajo</h2>
-                <p class="text-xs text-slate-400">Detalles de las agrupaciones y sus integrantes en el sistema</p>
+                <h2 class="text-2xl font-extrabold text-slate-900 tracking-tight">Grupos de Trabajo / Áreas</h2>
+                <p class="text-xs text-slate-500">Visualiza los equipos de trabajo definidos en la organización</p>
             </header>
 
             <div class="flex-grow overflow-y-auto custom-scrollbar space-y-6">
+                <!-- Crear Nuevo Grupo (Solo Admin) -->
+                {% if user_role == 'admin' %}
+                <div class="liquid-glass-panel rounded-2xl p-5 mb-4 max-w-md">
+                    <h3 class="text-xs font-bold text-purple-600 uppercase tracking-widest mb-4"><i class="fa-solid fa-folder-plus mr-2"></i>Crear Nuevo Grupo / Área</h3>
+                    <form action="/admin/crear-grupo" method="POST" class="flex gap-2">
+                        <input type="text" name="nombre_grupo" required placeholder="Nombre del área (ej: Logística)..." class="bg-white border border-slate-200 rounded-xl px-4 py-2 text-xs text-slate-800 placeholder-slate-400 focus:outline-none flex-grow">
+                        <button type="submit" class="bg-purple-600 hover:bg-purple-700 text-white font-bold px-4 rounded-xl text-xs transition-colors">Crear</button>
+                    </form>
+                </div>
+                {% endif %}
+
                 <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
                     {% for g in lista_grupos %}
                     <div class="liquid-glass-panel rounded-2xl p-6 space-y-4">
                         <div class="flex items-center justify-between">
-                            <span class="font-bold text-sm text-white flex items-center"><i class="fa-solid fa-folder-open mr-2 text-purple-400"></i>{{ g.nombre }}</span>
-                            <span class="text-[10px] bg-purple-500/10 border border-purple-500/20 text-purple-300 px-2.5 py-0.5 rounded-full font-mono">{{ g.miembros|length }} Miembros</span>
+                            <span class="font-bold text-sm text-slate-900 flex items-center"><i class="fa-solid fa-folder-open mr-2 text-purple-500"></i>{{ g.nombre }}</span>
+                            <span class="text-[10px] bg-purple-100 text-purple-700 px-2.5 py-0.5 rounded-full font-mono">{{ g.miembros|length }} Integrantes</span>
                         </div>
                         
-                        <!-- Lista de Integrantes de este Grupo -->
-                        <div class="space-y-2 pt-2 border-t border-white/5 max-h-48 overflow-y-auto custom-scrollbar">
+                        <div class="space-y-2 pt-2 border-t border-slate-200 max-h-48 overflow-y-auto custom-scrollbar">
                             {% for m in g.miembros %}
-                                <div class="flex items-center justify-between text-xs py-1 px-2 hover:bg-white/2 rounded-lg">
-                                    <span class="text-slate-300"><i class="fa-regular fa-user mr-2 text-slate-500"></i>{{ m }}</span>
+                                <div class="flex items-center justify-between text-xs py-1 px-2 hover:bg-slate-100 rounded-lg">
+                                    <span class="text-slate-600"><i class="fa-regular fa-user mr-2 text-slate-400"></i>{{ m }}</span>
                                     {% if user_role == 'admin' %}
-                                    <button onclick="quitarDeGrupo('{{ g._id }}', '{{ m }}')" class="text-red-400 hover:text-red-600 font-bold" title="Remover del grupo">Quitar</button>
+                                    <button onclick="quitarDeGrupo('{{ g._id }}', '{{ m }}')" class="text-red-500 hover:text-red-700 font-bold" title="Remover del grupo">Quitar</button>
                                     {% endif %}
                                 </div>
                             {% else %}
-                                <span class="text-xs text-slate-500 italic block">No hay miembros en este grupo.</span>
+                                <span class="text-xs text-slate-400 italic block">Sin miembros asignados.</span>
                             {% endfor %}
                         </div>
 
                         {% if user_role == 'admin' %}
-                        <!-- Añadir miembro rápido -->
-                        <form action="/admin/agregar-miembro-grupo" method="POST" class="pt-2 border-t border-white/5 flex gap-2">
+                        <form action="/admin/agregar-miembro-grupo" method="POST" class="pt-2 border-t border-slate-200 flex gap-2">
                             <input type="hidden" name="grupo_id" value="{{ g._id }}">
-                            <select name="miembro_nuevo" required class="bg-white/5 border border-white/10 rounded-xl px-2 py-1.5 text-xs text-slate-300 focus:outline-none flex-grow">
-                                <option value="" class="bg-slate-900 text-slate-400">Añadir usuario...</option>
+                            <select name="miembro_nuevo" required class="bg-white border border-slate-200 rounded-xl px-2 py-1.5 text-xs text-slate-600 focus:outline-none flex-grow">
+                                <option value="">Añadir persona...</option>
                                 {% for u in lista_usuarios %}
                                     {% if u.username not in g.miembros %}
-                                        <option value="{{ u.username }}" class="bg-slate-900">{{ u.username }}</option>
+                                        <option value="{{ u.username }}">{{ u.username }}</option>
                                     {% endif %}
                                 {% endfor %}
                             </select>
@@ -354,19 +375,39 @@ HTML_TEMPLATE = """
             </div>
         </div>
 
-        <!-- ================= TAB: ADMIN (PERSONAL) ================= -->
+        <!-- ================= TAB: ADMIN (PERSONAL & NUEVO USUARIO) ================= -->
         {% if user_role == 'admin' %}
         <div id="adminTab" class="tab-content flex-grow flex flex-col h-full overflow-hidden hidden">
             <header class="mb-6">
-                <h2 class="text-2xl font-extrabold text-white tracking-tight">Administración de Personal</h2>
-                <p class="text-xs text-slate-400">Modifica, deshabilita y administra accesos de usuarios</p>
+                <h2 class="text-2xl font-extrabold text-slate-900 tracking-tight">Administración de Colaboradores</h2>
+                <p class="text-xs text-slate-500">Crea nuevos usuarios, edita perfiles, asigna grupos y administra accesos</p>
             </header>
 
             <div class="flex-grow overflow-y-auto custom-scrollbar space-y-6">
+                
+                <!-- REGISTRO DE NUEVO COLABORADOR (SOLICITADO) -->
+                <div class="liquid-glass-panel rounded-2xl p-6">
+                    <h3 class="text-xs font-bold text-blue-600 uppercase tracking-widest mb-4"><i class="fa-solid fa-user-plus mr-2"></i>Registrar Nuevo Colaborador</h3>
+                    <form action="/admin/crear-usuario" method="POST" class="grid grid-cols-1 md:grid-cols-5 gap-4">
+                        <input type="text" name="nuevo_usuario" required placeholder="Nombre de usuario..." class="bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none">
+                        <input type="password" name="password" required placeholder="Contraseña..." class="bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none">
+                        
+                        <select name="rol" required class="bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-600 focus:outline-none">
+                            <option value="user">Colaborador</option>
+                            <option value="admin">Administrador</option>
+                        </select>
+
+                        <input type="url" name="avatar" placeholder="URL Foto de Perfil (Obligatorio)..." required class="bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none">
+                        
+                        <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs transition-colors py-2.5">Registrar</button>
+                    </form>
+                </div>
+
+                <!-- TABLA DE USUARIOS EXISTENTES -->
                 <div class="liquid-glass-panel rounded-2xl overflow-hidden">
                     <table class="w-full text-left border-collapse text-xs">
                         <thead>
-                            <tr class="border-b border-white/5 bg-white/2 text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                            <tr class="border-b border-slate-200 bg-slate-50/50 text-[10px] text-slate-500 font-bold uppercase tracking-wider">
                                 <th class="py-3.5 px-6">Foto</th>
                                 <th class="py-3.5 px-6">Usuario</th>
                                 <th class="py-3.5 px-6">Rol</th>
@@ -375,25 +416,25 @@ HTML_TEMPLATE = """
                                 <th class="py-3.5 px-6 text-right">Acciones de Control</th>
                             </tr>
                         </thead>
-                        <tbody class="divide-y divide-white/5">
+                        <tbody class="divide-y divide-slate-100">
                             {% for u in lista_usuarios_completa %}
-                            <tr class="hover:bg-white/1 transition-colors">
+                            <tr class="hover:bg-white/50 transition-colors">
                                 <td class="py-3 px-6">
-                                    <img src="{{ u.avatar or 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=100&h=100&q=80' }}" class="w-8 h-8 rounded-lg object-cover border border-white/10" alt="Foto">
+                                    <img src="{{ u.avatar or 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=100&h=100&q=80' }}" class="w-8 h-8 rounded-lg object-cover border border-slate-200 shadow-sm" alt="Foto">
                                 </td>
-                                <td class="py-3 px-6 font-semibold text-white">{{ u.username }}</td>
-                                <td class="py-3 px-6 capitalize text-slate-400">{{ u.rol }}</td>
+                                <td class="py-3 px-6 font-semibold text-slate-900">{{ u.username }}</td>
+                                <td class="py-3 px-6 capitalize text-slate-500">{{ u.rol }}</td>
                                 <td class="py-3 px-6">
-                                    <span class="text-slate-300 font-mono">{{ u.grupo_nombre or 'Persona Sola' }}</span>
+                                    <span class="text-slate-600 font-semibold">{{ u.grupo_nombre or 'Varios (Persona Sola)' }}</span>
                                 </td>
                                 <td class="py-3 px-6">
-                                    <span class="px-2 py-0.5 rounded text-[10px] font-bold {{ 'bg-green-500/10 text-green-400 border border-green-500/10' if u.activo != False else 'bg-red-500/10 text-red-400 border border-red-500/10' }}">
+                                    <span class="px-2 py-0.5 rounded text-[10px] font-bold {{ 'bg-green-100 text-green-700 border border-green-200' if u.activo != False else 'bg-red-100 text-red-700 border border-red-200' }}">
                                         {{ 'Activo' if u.activo != False else 'Inhabilitado' }}
                                     </span>
                                 </td>
                                 <td class="py-3 px-6 text-right space-x-2">
-                                    <button onclick="openEditUserModal('{{ u._id }}', '{{ u.username }}', '{{ u.rol }}', '{{ u.grupo }}', '{{ u.activo }}')" class="bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white px-2.5 py-1 rounded-lg transition-all">Editar / Reset</button>
-                                    <button onclick="toggleInhabilitarUser('{{ u._id }}', {{ 'true' if u.activo != False else 'false' }})" class="{{ 'text-red-400 hover:text-red-500' if u.activo != False else 'text-green-400 hover:text-green-500' }} font-bold">
+                                    <button onclick="openEditUserModal('{{ u._id }}', '{{ u.username }}', '{{ u.rol }}', '{{ u.grupo }}', '{{ u.activo }}')" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-2.5 py-1 rounded-lg transition-all border border-slate-200">Editar / Reset</button>
+                                    <button onclick="toggleInhabilitarUser('{{ u._id }}', {{ 'true' if u.activo != False else 'false' }})" class="{{ 'text-red-500 hover:text-red-700' if u.activo != False else 'text-green-600 hover:text-green-700' }} font-bold">
                                         {{ 'Inhabilitar' if u.activo != False else 'Habilitar' }}
                                     </button>
                                 </td>
@@ -409,25 +450,25 @@ HTML_TEMPLATE = """
         <!-- ================= TAB: MI PERFIL (Foto de Perfil Obligatoria) ================= -->
         <div id="perfilTab" class="tab-content flex-grow flex flex-col h-full overflow-hidden hidden">
             <header class="mb-6">
-                <h2 class="text-2xl font-extrabold text-white tracking-tight">Mi Perfil</h2>
-                <p class="text-xs text-slate-400">Actualiza tu información y tu foto de perfil de colaboración</p>
+                <h2 class="text-2xl font-extrabold text-slate-900 tracking-tight">Mi Perfil</h2>
+                <p class="text-xs text-slate-500">Gestiona tu foto de perfil de colaboración</p>
             </header>
 
-            <div class="max-w-md bg-white/5 border border-white/10 p-6 rounded-2xl shadow-xl space-y-6">
+            <div class="max-w-md bg-white/70 border border-slate-200/80 p-6 rounded-2xl shadow-md space-y-6">
                 <div class="flex items-center space-x-4">
-                    <img id="profilePreview" src="{{ current_user_avatar }}" class="w-20 h-20 rounded-2xl object-cover border border-white/20 shadow-lg" alt="Foto">
+                    <img id="profilePreview" src="{{ current_user_avatar }}" class="w-20 h-20 rounded-2xl object-cover border border-slate-300 shadow-md" alt="Foto">
                     <div>
-                        <h3 class="font-bold text-base text-white">{{ username }}</h3>
-                        <p class="text-xs text-slate-400">Rol: {{ user_role }}</p>
+                        <h3 class="font-bold text-base text-slate-900">{{ username }}</h3>
+                        <p class="text-xs text-slate-500">Rol: {{ user_role }}</p>
                     </div>
                 </div>
 
                 <form action="/perfil/actualizar-avatar" method="POST" class="space-y-4">
                     <div>
-                        <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Enlace URL de tu foto de perfil</label>
-                        <input type="url" name="avatar_url" required value="{{ current_user_avatar }}" class="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
+                        <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Enlace URL de tu foto de perfil</label>
+                        <input type="url" name="avatar_url" required value="{{ current_user_avatar }}" class="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-400">
                     </div>
-                    <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-4 rounded-xl text-xs transition-colors">Guardar Avatar</button>
+                    <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-4 rounded-xl text-xs transition-colors shadow-sm">Actualizar Foto</button>
                 </form>
             </div>
         </div>
@@ -435,38 +476,38 @@ HTML_TEMPLATE = """
     </main>
 
     <!-- MODAL PARA EDITAR USUARIO / RESETEAR PASSWORD (SOLO ADMIN) -->
-    <div id="editUserModal" class="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center p-4 hidden z-50">
-        <div class="liquid-glass p-8 rounded-3xl w-full max-w-md text-white border border-white/10">
+    <div id="editUserModal" class="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center p-4 hidden z-50">
+        <div class="liquid-glass-panel p-8 rounded-3xl w-full max-w-md text-slate-800 bg-white border border-slate-200">
             <div class="flex justify-between items-center mb-6">
-                <h3 class="font-bold text-base">Modificar Colaborador</h3>
-                <button onclick="closeEditUserModal()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-times"></i></button>
+                <h3 class="font-bold text-base text-slate-900">Modificar Colaborador</h3>
+                <button onclick="closeEditUserModal()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-times"></i></button>
             </div>
             
             <form action="/admin/editar-colaborador" method="POST" class="space-y-4">
                 <input type="hidden" id="editUserId" name="user_id">
                 
                 <div>
-                    <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1.5">Nombre de Usuario</label>
-                    <input type="text" id="editUsernameInput" name="username" readonly class="w-full bg-white/5 border border-white/5 rounded-xl px-4 py-2 text-xs text-slate-400 focus:outline-none">
+                    <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1.5">Nombre de Usuario</label>
+                    <input type="text" id="editUsernameInput" name="username" readonly class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs text-slate-500 focus:outline-none">
                 </div>
 
                 <div>
-                    <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1.5">Nueva Contraseña (Dejar en blanco si no cambia)</label>
-                    <input type="password" name="password" placeholder="Establecer nueva clave" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-xs text-white focus:outline-none">
+                    <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1.5">Nueva Contraseña (Dejar vacío para no cambiar)</label>
+                    <input type="password" name="password" placeholder="Establecer clave nueva" class="w-full bg-white border border-slate-200 rounded-xl px-4 py-2 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-400">
                 </div>
 
                 <div>
-                    <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1.5">Rol de Sistema</label>
-                    <select id="editUserRol" name="rol" class="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-2 text-xs text-slate-300 focus:outline-none">
+                    <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1.5">Rol de Sistema</label>
+                    <select id="editUserRol" name="rol" class="w-full bg-white border border-slate-200 rounded-xl px-4 py-2 text-xs text-slate-700 focus:outline-none">
                         <option value="user">Colaborador</option>
                         <option value="admin">Administrador</option>
                     </select>
                 </div>
 
                 <div>
-                    <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1.5">Grupo Principal</label>
-                    <select id="editUserGrupo" name="grupo_id" class="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-2 text-xs text-slate-300 focus:outline-none">
-                        <option value="">Ninguno (Persona Sola)</option>
+                    <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1.5">Grupo / Área Principal</label>
+                    <select id="editUserGrupo" name="grupo_id" class="w-full bg-white border border-slate-200 rounded-xl px-4 py-2 text-xs text-slate-700 focus:outline-none">
+                        <option value="">Varios (Ninguno)</option>
                         {% for g in lista_grupos %}
                             <option value="{{ g._id }}">{{ g.nombre }}</option>
                         {% endfor %}
@@ -482,20 +523,20 @@ HTML_TEMPLATE = """
     <script>
         let activeTaskId = null;
 
-        // Cambiar pestañas laterales
+        // Cambiar pestañas
         function switchTab(tabId) {
             document.querySelectorAll('.tab-content').forEach(tab => tab.classList.add('hidden'));
             document.getElementById(tabId).classList.remove('hidden');
 
             document.querySelectorAll('.tab-btn').forEach(btn => {
-                btn.classList.remove('bg-white/5', 'text-white');
-                btn.classList.add('text-slate-400');
+                btn.classList.remove('bg-white/60', 'text-slate-900', 'shadow-sm');
+                btn.classList.add('text-slate-500');
             });
-            event.currentTarget.classList.add('bg-white/5', 'text-white');
-            event.currentTarget.classList.remove('text-slate-400');
+            event.currentTarget.classList.add('bg-white/60', 'text-slate-900', 'shadow-sm');
+            event.currentTarget.classList.remove('text-slate-500');
         }
 
-        // Cargar Tareas
+        // Cargar Tareas dinámicamente
         async function loadTareas(filters = {}) {
             const tbody = document.getElementById('tareasTableBody');
             const params = new URLSearchParams(filters).toString();
@@ -509,8 +550,8 @@ HTML_TEMPLATE = """
                 if (data.length === 0) {
                     tbody.innerHTML = `
                         <tr>
-                            <td colspan="6" class="text-center py-8 text-slate-500 italic">
-                                No se encontraron tareas.
+                            <td colspan="6" class="text-center py-8 text-slate-400 italic">
+                                No se encontraron tareas para estos criterios.
                             </td>
                         </tr>`;
                     return;
@@ -519,49 +560,60 @@ HTML_TEMPLATE = """
                 data.forEach(tarea => {
                     const mongoId = tarea._id?.$oid || tarea._id || '';
                     const isCompleted = tarea.estado === 'completado';
-                    const nNovedades = tarea.novedades ? tarea.novedades.length : 0;
                     
-                    // Identificación de origen visualmente claro para el usuario
-                    let badgeOrigen = '';
-                    if (tarea.tipo_asignacion === 'group') {
-                        badgeOrigen = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-500/10 text-purple-300 border border-purple-500/10"><i class="fa-solid fa-users mr-1"></i>${tarea.asignado_a}</span>`;
+                    // Colores de los badges del grupo/área asignado
+                    let badgeGrupo = '';
+                    if (tarea.grupo_asignado && tarea.grupo_asignado !== 'Varios') {
+                        badgeGrupo = `<span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-700 border border-purple-200"><i class="fa-solid fa-users mr-1"></i>${tarea.grupo_asignado}</span>`;
                     } else {
-                        badgeOrigen = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-500/10 text-slate-300 border border-slate-500/10"><i class="fa-solid fa-user mr-1"></i>Individual</span>`;
+                        badgeGrupo = `<span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-500 border border-slate-200"><i class="fa-solid fa-tags mr-1"></i>Varios</span>`;
                     }
 
+                    // Botón para eliminar tareas (Admin)
+                    let deleteButton = '';
+                    {% if user_role == 'admin' %}
+                    deleteButton = `
+                        <button onclick="eliminarTarea('${mongoId}')" class="text-red-500 hover:text-red-700 font-bold ml-2 transition-colors" title="Eliminar tarea">
+                            <i class="fa-regular fa-trash-can"></i>
+                        </button>
+                    `;
+                    {% endif %}
+
                     tbody.innerHTML += `
-                        <tr class="hover:bg-white/2 transition-colors cursor-pointer" onclick="openDetailPanel('${mongoId}')">
-                            <td class="py-3 px-6 text-center" onclick="event.stopPropagation()">
-                                <button onclick="toggleCompletado('${mongoId}', '${tarea.estado}')" class="w-5 h-5 rounded-full border-2 ${isCompleted ? 'border-green-500 bg-green-500 text-white' : 'border-slate-600 hover:border-blue-500'} flex items-center justify-center transition-all">
+                        <tr class="hover:bg-white/40 transition-colors cursor-pointer" onclick="openDetailPanel('${mongoId}')">
+                            <td class="py-3.5 px-6 text-center" onclick="event.stopPropagation()">
+                                <button onclick="toggleCompletado('${mongoId}', '${tarea.estado}')" class="w-5 h-5 rounded-full border-2 ${isCompleted ? 'border-green-500 bg-green-500 text-white' : 'border-slate-300 hover:border-blue-500'} flex items-center justify-center transition-all">
                                     ${isCompleted ? '<i class="fa-solid fa-check text-[10px]"></i>' : ''}
                                 </button>
                             </td>
-                            <td class="py-3 px-6 font-semibold text-slate-200 ${isCompleted ? 'line-through text-slate-500' : ''}">
+                            <td class="py-3.5 px-6 font-semibold text-slate-800 ${isCompleted ? 'line-through text-slate-400 font-normal' : ''}">
                                 ${tarea.descripcion}
                             </td>
-                            <td class="py-3 px-6">
-                                ${badgeOrigen}
+                            <td class="py-3.5 px-6">
+                                ${badgeGrupo}
                             </td>
-                            <td class="py-3 px-6">
-                                <span class="px-2.5 py-0.5 rounded text-[10px] font-semibold bg-red-500/10 text-red-300 border border-red-500/10">
+                            <td class="py-3.5 px-6">
+                                <span class="text-slate-600 font-bold"><i class="fa-regular fa-user mr-1 text-slate-400"></i>${tarea.persona_asignada || 'Sin asignar'}</span>
+                            </td>
+                            <td class="py-3.5 px-6">
+                                <span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-red-50 text-red-600 border border-red-100">
                                     <i class="fa-regular fa-calendar mr-1"></i>${tarea.fecha_entrega}
                                 </span>
                             </td>
-                            <td class="py-3 px-6 text-slate-400">
-                                <i class="fa-regular fa-comment-dots mr-1 text-slate-500"></i>${nNovedades} notas
-                            </td>
-                            <td class="py-3 px-6 text-right" onclick="event.stopPropagation()">
-                                <button onclick="openDetailPanel('${mongoId}')" class="text-blue-400 hover:text-blue-300 font-bold">Ver</button>
+                            <td class="py-3.5 px-6 text-right" onclick="event.stopPropagation()">
+                                <button onclick="openDetailPanel('${mongoId}')" class="text-blue-600 hover:text-blue-700 font-bold">Ver</button>
+                                ${deleteButton}
                             </td>
                         </tr>
                     `;
                 });
 
             } catch (error) {
-                console.error("Error cargando tareas", error);
+                console.error("Error al cargar tareas", error);
             }
         }
 
+        // Cargar detalles de tarea al panel de Asana
         async function openDetailPanel(id) {
             activeTaskId = id;
             document.getElementById('asanaDetailPanel').classList.remove('hidden');
@@ -571,38 +623,39 @@ HTML_TEMPLATE = """
                 const tarea = await response.json();
 
                 document.getElementById('detailTitle').textContent = tarea.descripcion;
-                document.getElementById('detailAsignado').textContent = `${tarea.asignado_a} (${tarea.tipo_asignacion})`;
-                document.getElementById('detailFechaText').textContent = tarea.fecha_entrega;
+                document.getElementById('detailGrupo').textContent = tarea.grupo_asignado || 'Varios';
+                document.getElementById('detailAsignado').textContent = tarea.persona_asignada || 'Sin asignar';
 
-                // Si eres admin, puedes ver y usar el panel de edición directa
+                // Si eres administrador, puedes editar la tarea directamente
                 {% if user_role == 'admin' %}
                     document.getElementById('editTaskSection').classList.remove('hidden');
                     document.getElementById('editDescripcion').value = tarea.descripcion;
-                    document.getElementById('editFecha').value = tarea.fecha_entrega;
-                    document.getElementById('editAsignado').value = `${tarea.tipo_asignacion}:${tarea.asignado_a}`;
+                    document.getElementById('editGrupo').value = tarea.grupo_asignado || 'Varios';
+                    document.getElementById('editResponsable').value = tarea.persona_asignada || '';
+                    document.getElementById('editFecha').value = tarea.fecha_entrega || '';
                 {% endif %}
 
-                // Novedades
+                // Render de novedades registradas en hora de Colombia
                 const container = document.getElementById('notasContainer');
                 container.innerHTML = '';
                 if(tarea.novedades && tarea.novedades.length > 0) {
                     tarea.novedades.forEach(n => {
                         container.innerHTML += `
-                            <div class="bg-white/2 border border-white/5 rounded-xl p-3 space-y-1">
-                                <div class="flex justify-between items-center text-[9px] text-slate-500">
-                                    <span class="font-bold text-slate-300">${n.autor}</span>
-                                    <span>${n.fecha} (Col)</span>
+                            <div class="bg-white border border-slate-200/60 rounded-xl p-3 space-y-1">
+                                <div class="flex justify-between items-center text-[9px] text-slate-400">
+                                    <span class="font-bold text-slate-600">${n.autor}</span>
+                                    <span>${n.fecha}</span>
                                 </div>
-                                <p class="text-xs text-slate-300 leading-relaxed">${n.texto}</p>
+                                <p class="text-xs text-slate-700 leading-relaxed">${n.texto}</p>
                             </div>
                         `;
                     });
                 } else {
-                    container.innerHTML = '<span class="text-[10px] text-slate-500 italic block text-center py-4">Sin novedades aún.</span>';
+                    container.innerHTML = '<span class="text-[10px] text-slate-400 italic block text-center py-4">Sin novedades aún.</span>';
                 }
 
             } catch (e) {
-                console.error("Error cargando detalle", e);
+                console.error("Error al recuperar el detalle de la tarea", e);
             }
         }
 
@@ -644,13 +697,14 @@ HTML_TEMPLATE = """
         async function guardarEdicionTarea() {
             if(!activeTaskId) return;
             const desc = document.getElementById('editDescripcion').value;
+            const grupo = document.getElementById('editGrupo').value;
+            const resp = document.getElementById('editResponsable').value;
             const fec = document.getElementById('editFecha').value;
-            const asig = document.getElementById('editAsignado').value;
 
             const res = await fetch(`/api/tareas/editar-completo`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({id: activeTaskId, descripcion: desc, fecha: fec, asignado: asig})
+                body: JSON.stringify({id: activeTaskId, descripcion: desc, grupo_asignado: grupo, persona_asignada: resp, fecha: fec})
             });
 
             if(res.ok) {
@@ -659,7 +713,16 @@ HTML_TEMPLATE = """
             }
         }
 
-        // Filtros rápidos
+        async function eliminarTarea(id) {
+            if(confirm("¿Seguro que deseas eliminar esta tarea permanentemente?")) {
+                const res = await fetch(`/api/tareas/eliminar/${id}`, { method: 'DELETE' });
+                if (res.ok) {
+                    closeDetailPanel();
+                    loadTareas();
+                }
+            }
+        }
+
         function applyFilters() {
             loadTareas({
                 grupo: document.getElementById('filtroGrupo').value,
@@ -668,7 +731,7 @@ HTML_TEMPLATE = """
             });
         }
 
-        // Modales de Usuario
+        // Modales de control de usuarios
         function openEditUserModal(id, username, rol, grupo, activo) {
             document.getElementById('editUserModal').classList.remove('hidden');
             document.getElementById('editUserId').value = id;
@@ -682,14 +745,14 @@ HTML_TEMPLATE = """
         }
 
         async function toggleInhabilitarUser(id, actualActivo) {
-            const m = actualActivo ? '¿Estás seguro de inhabilitar este usuario? No podrá iniciar sesión.' : '¿Deseas reactivar al usuario?';
-            if(confirm(m)) {
+            const actionText = actualActivo ? 'deshabilitar' : 'habilitar';
+            if(confirm(`¿Estás seguro de que deseas ${actionText} a este colaborador?`)) {
                 window.location.href = `/admin/cambiar-estado-usuario/${id}/${!actualActivo}`;
             }
         }
 
         async function quitarDeGrupo(grupoId, username) {
-            if(confirm(`¿Quieres retirar a ${username} de este grupo?`)) {
+            if(confirm(`¿Quieres retirar a ${username} de este grupo de trabajo?`)) {
                 window.location.href = `/admin/quitar-miembro-grupo/${grupoId}/${username}`;
             }
         }
@@ -700,7 +763,7 @@ HTML_TEMPLATE = """
 </html>
 """
 
-# --- INICIALIZAR ELEMENTOS BASE ---
+# --- INICIALIZAR ELEMENTOS BASE (ADMIN) ---
 def inicializar_sistema():
     if usuarios_col.count_documents({}) == 0:
         usuarios_col.insert_one({
@@ -711,7 +774,7 @@ def inicializar_sistema():
             "activo": True
         })
 
-# --- CONTROLADORES Y SESIONES (FLASK) ---
+# --- CONTROLADORES DE FLASK ---
 
 @app.route('/')
 def index():
@@ -721,7 +784,6 @@ def index():
     lista_usuarios = list(usuarios_col.find({"rol": "user"}, {"password": 0}))
     lista_grupos = list(grupos_col.find({}))
     
-    # Datos completos de usuarios con información del grupo para el panel del admin
     lista_usuarios_completa = []
     for u in usuarios_col.find({}):
         u['_id'] = str(u['_id'])
@@ -770,8 +832,7 @@ def logout():
     session.clear()
     return redirect(url_for('login'))
 
-# --- ACCIONES DE PERFIL ---
-
+# --- ACTUALIZAR FOTO ---
 @app.route('/perfil/actualizar-avatar', methods=['POST'])
 def actualizar_avatar():
     if 'username' not in session:
@@ -785,7 +846,76 @@ def actualizar_avatar():
         )
     return redirect(url_for('index'))
 
-# --- ACCIONES ADMINISTRATIVAS ---
+# --- CONTROL DE ADMINISTRACIÓN Y COLABORADORES ---
+
+@app.route('/admin/crear-usuario', methods=['POST'])
+def crear_usuario():
+    if session.get('rol') != 'admin':
+        return "Acceso denegado", 403
+        
+    username = request.form.get('nuevo_usuario')
+    password = request.form.get('password')
+    rol = request.form.get('rol', 'user')
+    avatar_url = request.form.get('avatar')
+
+    if username and password:
+        usuarios_col.update_one(
+            {"username": username},
+            {"$set": {
+                "password": password, 
+                "rol": rol, 
+                "avatar": avatar_url or "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=200&q=80",
+                "activo": True
+            }},
+            upsert=True
+        )
+            
+    return redirect(url_for('index'))
+
+@app.route('/admin/editar-colaborador', methods=['POST'])
+def editar_colaborador():
+    if session.get('rol') != 'admin':
+        return "Acceso denegado", 403
+        
+    user_id = request.form.get('user_id')
+    password = request.form.get('password')
+    rol = request.form.get('rol')
+    grupo_id = request.form.get('grupo_id')
+
+    if user_id:
+        update_data = {"rol": rol, "grupo": grupo_id}
+        if password:
+            update_data["password"] = password
+
+        usuarios_col.update_one(
+            {"_id": ObjectId(user_id)},
+            {"$set": update_data}
+        )
+        
+        # Vincular automáticamente al grupo de trabajo
+        if grupo_id:
+            user_doc = usuarios_col.find_one({"_id": ObjectId(user_id)})
+            if user_doc:
+                grupos_col.update_one(
+                    {"_id": ObjectId(grupo_id)},
+                    {"$addToSet": {"miembros": user_doc['username']}}
+                )
+
+    return redirect(url_for('index'))
+
+@app.route('/admin/cambiar-estado-usuario/<id>/<activo>', methods=['GET'])
+def cambiar_estado_usuario(id, activo):
+    if session.get('rol') != 'admin':
+        return "Acceso denegado", 403
+        
+    is_active = activo == 'true'
+    usuarios_col.update_one(
+        {"_id": ObjectId(id)},
+        {"$set": {"activo": is_active}}
+    )
+    return redirect(url_for('index'))
+
+# --- CONTROL DE GRUPOS ---
 
 @app.route('/admin/crear-grupo', methods=['POST'])
 def crear_grupo():
@@ -827,78 +957,7 @@ def quitar_miembro_grupo(grupo_id, username):
     )
     return redirect(url_for('index'))
 
-@app.route('/admin/crear-usuario', methods=['POST'])
-def crear_usuario():
-    if session.get('rol') != 'admin':
-        return "Acceso denegado", 403
-        
-    username = request.form.get('nuevo_usuario')
-    password = request.form.get('password')
-    rol = request.form.get('rol', 'user')
-    grupo_id = request.form.get('grupo_id')
-
-    if username and password:
-        usuarios_col.update_one(
-            {"username": username},
-            {"$set": {
-                "password": password, 
-                "rol": rol, 
-                "grupo": grupo_id,
-                "avatar": "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=200&q=80",
-                "activo": True
-            }},
-            upsert=True
-        )
-        if grupo_id:
-            grupos_col.update_one(
-                {"_id": ObjectId(grupo_id)},
-                {"$addToSet": {"miembros": username}}
-            )
-            
-    return redirect(url_for('index'))
-
-@app.route('/admin/editar-colaborador', methods=['POST'])
-def editar_colaborador():
-    if session.get('rol') != 'admin':
-        return "Acceso denegado", 403
-        
-    user_id = request.form.get('user_id')
-    password = request.form.get('password')
-    rol = request.form.get('rol')
-    grupo_id = request.form.get('grupo_id')
-
-    if user_id:
-        update_data = {"rol": rol, "grupo": grupo_id}
-        if password:
-            update_data["password"] = password
-
-        usuarios_col.update_one(
-            {"_id": ObjectId(user_id)},
-            {"$set": update_data}
-        )
-        
-        # Sincronizar el miembro en el grupo si aplica
-        if grupo_id:
-            user_doc = usuarios_col.find_one({"_id": ObjectId(user_id)})
-            if user_doc:
-                grupos_col.update_one(
-                    {"_id": ObjectId(grupo_id)},
-                    {"$addToSet": {"miembros": user_doc['username']}}
-                )
-
-    return redirect(url_for('index'))
-
-@app.route('/admin/cambiar-estado-usuario/<id>/<activo>', methods=['GET'])
-def cambiar_estado_usuario(id, activo):
-    if session.get('rol') != 'admin':
-        return "Acceso denegado", 403
-        
-    is_active = activo == 'true'
-    usuarios_col.update_one(
-        {"_id": ObjectId(id)},
-        {"$set": {"activo": is_active}}
-    )
-    return redirect(url_for('index'))
+# --- CONTROL DE TAREAS ---
 
 @app.route('/admin/crear-tarea', methods=['POST'])
 def crear_tarea():
@@ -906,15 +965,15 @@ def crear_tarea():
         return "Acceso denegado", 403
         
     descripcion = request.form.get('descripcion')
-    asignado_tipo_id = request.form.get('asignado_tipo_id')
+    grupo_asignado = request.form.get('grupo_asignado', 'Varios') # Si es suelta, va a 'Varios'
+    persona_asignada = request.form.get('persona_asignada')
     fecha_entrega = request.form.get('fecha_entrega')
 
-    if descripcion and asignado_tipo_id:
-        tipo, valor = asignado_tipo_id.split(':', 1)
+    if descripcion:
         visitas_col.insert_one({
             "descripcion": descripcion,
-            "asignado_a": valor,
-            "tipo_asignacion": tipo,
+            "grupo_asignado": grupo_asignado,
+            "persona_asignada": persona_asignada,
             "fecha_entrega": fecha_entrega,
             "estado": "pendiente",
             "novedades": []
@@ -922,7 +981,7 @@ def crear_tarea():
         
     return redirect(url_for('index'))
 
-# --- API ENDPOINTS (RESPUESTAS AJAX) ---
+# --- API ENDPOINTS ---
 
 @app.route('/api/tareas', methods=['GET'])
 def get_tareas():
@@ -932,28 +991,21 @@ def get_tareas():
     query = {}
     username = session['username']
     
-    # Filtrado base por Roles
+    # Si no es admin, solo puede ver sus asignaciones directas o de sus áreas
     if session.get('rol') != 'admin':
         mis_grupos_docs = list(grupos_col.find({"miembros": username}))
         mis_grupos_nombres = [g['nombre'] for g in mis_grupos_docs]
         
         query['$or'] = [
-            {"asignado_a": username, "tipo_asignacion": "user"},
-            {"asignado_a": {"$in": mis_grupos_nombres}, "tipo_asignacion": "group"}
+            {"persona_asignada": username},
+            {"grupo_asignado": {"$in": mis_grupos_nombres}}
         ]
         
-    # Filtro específico de origen de grupo (Individual o Nombre del Grupo)
+    # Filtro específico de barra de búsqueda / grupo
     grupo_filtro = request.args.get('grupo')
     if grupo_filtro:
-        if grupo_filtro == 'individual':
-            query['tipo_asignacion'] = 'user'
-            if session.get('rol') != 'admin':
-                query['asignado_a'] = username
-        else:
-            query['asignado_a'] = grupo_filtro
-            query['tipo_asignacion'] = 'group'
+        query['grupo_asignado'] = grupo_filtro
 
-    # Filtros de búsqueda y estado
     estado = request.args.get('estado')
     if estado:
         query['estado'] = estado
@@ -997,7 +1049,7 @@ def agregar_novedad():
     tarea_id = data.get('id')
     texto_nota = data.get('texto')
     
-    # Hora de Colombia precisa
+    # Hora local de Colombia usando timedelta nativo de forma limpia
     fecha_colombia = datetime.now(CO_TZ).strftime("%Y-%m-%d %I:%M %p")
     
     novedad = {
@@ -1020,20 +1072,28 @@ def editar_completo_tarea():
     data = request.json
     tarea_id = data.get('id')
     desc = data.get('descripcion')
+    grupo = data.get('grupo_asignado')
+    persona = data.get('persona_asignada')
     fecha = data.get('fecha')
-    asig_raw = data.get('asignado') # Formato 'tipo:valor'
 
-    if tarea_id and desc and asig_raw:
-        tipo, valor = asig_raw.split(':', 1)
+    if tarea_id:
         visitas_col.update_one(
             {"_id": ObjectId(tarea_id)},
             {"$set": {
                 "descripcion": desc,
-                "fecha_entrega": fecha,
-                "asignado_a": valor,
-                "tipo_asignacion": tipo
+                "grupo_asignado": grupo,
+                "persona_asignada": persona,
+                "fecha_entrega": fecha
             }}
         )
+    return jsonify({"status": "success"})
+
+@app.route('/api/tareas/eliminar/<id>', methods=['DELETE'])
+def eliminar_tarea(id):
+    if session.get('rol') != 'admin':
+        return "No autorizado", 403
+        
+    visitas_col.delete_one({"_id": ObjectId(id)})
     return jsonify({"status": "success"})
 
 if __name__ == '__main__':
