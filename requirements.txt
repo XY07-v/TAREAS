@@ -1,6 +1,2 @@
-git init
-git add .
-git commit -m "Primer commit: Mi Asana en Streamlit"
-git branch -M main
-git remote add origin TU_URL_DE_GITHUB
-git push -u origin main
+streamlit>=1.30.0
+pandas>=2.0.0
