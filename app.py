@@ -228,9 +228,12 @@ def get_tareas():
     return json_util.dumps(tareas), 200, {'Content-Type': 'application/json'}
 
 if __name__ == '__main__':
-    # Render asigna un puerto dinámico en la variable de entorno 'PORT'. 
-    # Si no existe (en tu local), usa el 5000 por defecto.
-    port = int(os.environ.get("PORT", 5000))
+    # Render define la variable de entorno 'PORT'
+    port_env = os.environ.get("PORT", "5000")
+    port = int(port_env)
     
-    # IMPORTANTE: host="0.0.0.0" es la clave para que Render pueda escanear el puerto.
+    # Imprimimos en consola para que lo veas en el log de Render:
+    print(f"--- INICIANDO FLASK EN EL PUERTO {port} ---")
+    
+    # host='0.0.0.0' expone la app al balanceador de carga de Render
     app.run(host="0.0.0.0", port=port, debug=False)
